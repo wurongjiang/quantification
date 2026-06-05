@@ -1,3 +1,5 @@
+import { persistSectorFlowPayload } from './sectorFlowStore.mjs';
+
 function json(payload, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -276,7 +278,7 @@ export default async () => {
       }))
     });
 
-    return json({
+    const payload = {
       source: 'Eastmoney sector fund flow',
       sectorType: 'mainstream',
       sortBy: 'mainNetInflow',
@@ -288,7 +290,30 @@ export default async () => {
       missing,
       updatedAt: items.find((item) => item.updatedAt)?.updatedAt || new Date().toISOString(),
       items
-    });
+    };
+
+    try {
+      const persistence = await persistSectorFlowPayload(payload);
+      if (persistence.skipped) {
+        logSectorFlow('persistence skipped', { reason: persistence.reason });
+      } else {
+        logSectorFlow('persistence ok', {
+          snapshotId: persistence.snapshotId,
+          tradingDate: persistence.tradingDate,
+          itemCount: persistence.itemCount
+        });
+      }
+      return json({ ...payload, persistence });
+    } catch (error) {
+      logSectorFlowError('persistence failed', error);
+      return json({
+        ...payload,
+        persistence: {
+          skipped: false,
+          error: error.message
+        }
+      });
+    }
   } catch (error) {
     logSectorFlowError('request failed', error);
     return json({ error: error.message }, 500);

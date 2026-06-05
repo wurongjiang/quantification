@@ -11,6 +11,11 @@ const {
   extractReviewTitle,
   sortReviewFileNames
 } = require('./lib/dailyReviewMeta');
+const {
+  getShanghaiDate,
+  persistSectorFlowPayload,
+  readSectorFlowHistory
+} = require('./lib/sectorFlowStore');
 
 const PORT = process.env.PORT || 4009;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -537,6 +542,35 @@ async function fetchSectorFundFlow() {
   };
 }
 
+async function attachSectorFlowPersistence(payload) {
+  try {
+    const persistence = await persistSectorFlowPayload(payload);
+    if (persistence.skipped) {
+      logSectorFlow('persistence skipped', { reason: persistence.reason });
+    } else {
+      logSectorFlow('persistence ok', {
+        snapshotId: persistence.snapshotId,
+        tradingDate: persistence.tradingDate,
+        itemCount: persistence.itemCount
+      });
+    }
+
+    return {
+      ...payload,
+      persistence
+    };
+  } catch (error) {
+    logSectorFlowError('persistence failed', error);
+    return {
+      ...payload,
+      persistence: {
+        skipped: false,
+        error: error.message
+      }
+    };
+  }
+}
+
 const server = http.createServer((req, res) => {
   const requestUrl = new URL(req.url, `http://${req.headers.host}`);
 
@@ -575,8 +609,21 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (requestUrl.pathname === '/api/sector-fund-flow/history') {
+    const date = requestUrl.searchParams.get('date') || getShanghaiDate();
+    readSectorFlowHistory(date)
+      .then((payload) => sendJson(res, 200, payload))
+      .catch((error) => {
+        const statusCode = error.code === 'SUPABASE_NOT_CONFIGURED' ? 503 : 500;
+        logSectorFlowError('history request failed', error, { date });
+        sendJson(res, statusCode, { error: error.message });
+      });
+    return;
+  }
+
   if (requestUrl.pathname === '/api/sector-fund-flow') {
     fetchSectorFundFlow()
+      .then(attachSectorFlowPersistence)
       .then((payload) => sendJson(res, 200, payload))
       .catch((error) => {
         logSectorFlowError('request failed', error);

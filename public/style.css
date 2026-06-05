@@ -800,6 +800,41 @@ input:focus-visible {
   min-height: 440px;
 }
 
+.sector-flow-history-section {
+  border-top-color: rgba(37, 99, 235, 0.18);
+}
+
+.sector-flow-history-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+  justify-content: flex-end;
+}
+
+.sector-flow-history-controls label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.sector-flow-history-controls input {
+  min-height: 42px;
+  min-width: 164px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.sector-flow-history-chart {
+  height: 520px;
+  min-height: 460px;
+}
+
 .sector-flow-table {
   min-width: 940px;
 }
@@ -1524,6 +1559,18 @@ input:focus-visible {
   .section-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .sector-flow-actions,
+  .sector-flow-history-controls {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .sector-flow-history-controls label,
+  .sector-flow-history-controls input,
+  .sector-flow-history-controls button {
+    width: 100%;
   }
 
   .chart-canvas {
