@@ -1,5 +1,6 @@
 const tabs = [
   { id: 'fear-greed', label: '恐贪值', title: 'A 股指数恐贪值 Demo', module: './app.js' },
+  { id: 'sector-flow', label: '板块资金', title: '今日板块资金流向', module: './sector-flow.js' },
   { id: 'cci', label: '多指数 CCI', title: '多指数 CCI 计算', module: './cci.js' },
   { id: 'weekly-boll', label: '周K布林', title: '周 K 布林带', module: './weekly-boll.js' },
   { id: 'sh-chan', label: '缠论日K', title: '缠论日 K 策略', module: './chan.js' },
@@ -58,6 +59,77 @@ const templates = {
         <div class="factor"><div class="metric-label">短线动量</div><strong id="factor-momentum">--</strong><div class="meta">20 日收益率 + RSI14</div></div>
         <div class="factor"><div class="metric-label">风险压力</div><strong id="factor-risk">--</strong><div class="meta">下跌压力 + 上涨舒适度</div></div>
         <div class="factor"><div class="metric-label">量能热度</div><strong id="factor-volume">--</strong><div class="meta">方向成交量: 量比 x 涨跌方向</div></div>
+      </div>
+      <div id="error" class="error" hidden></div>
+    </section>
+  `,
+
+  'sector-flow': `
+    <section class="hero sector-flow-hero">
+      <article class="panel hero-copy">
+        <div class="badge">Eastmoney 数据源 / 行业板块 / 今日资金</div>
+        <h1>今日板块资金流向</h1>
+        <p>展示行业板块主力净流入前十名，盘中按东方财富实时资金流数据滚动更新，适合快速观察当日资金最集中的方向。</p>
+        <div class="hero-signals" aria-label="板块资金口径">
+          <span>行业板块</span><span>主力净流入排序</span><span>前十名</span>
+        </div>
+      </article>
+      <aside class="panel summary">
+        <div class="summary-head">
+          <div>
+            <div class="eyebrow">Sector Fund Flow</div>
+            <strong>今日领涨资金方向</strong>
+          </div>
+          <div class="pulse-dot" aria-hidden="true"></div>
+        </div>
+        <div class="score">
+          <small>主力净流入第一名</small>
+          <strong id="sector-flow-leader">--</strong>
+          <span id="sector-flow-status">加载中...</span>
+        </div>
+        <div class="score-track" aria-hidden="true"><span></span></div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">净流入金额</div><strong id="sector-flow-leader-money">--</strong></div>
+          <div class="metric"><div class="metric-label">更新时间</div><strong id="sector-flow-updated">--</strong></div>
+          <div class="metric"><div class="metric-label">展示数量</div><strong id="sector-flow-count">--</strong></div>
+          <div class="metric"><div class="metric-label">净流入板块</div><strong id="sector-flow-positive-count">--</strong></div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="panel section">
+      <div class="section-header">
+        <div>
+          <h2>行业板块资金前十</h2>
+          <div class="meta">按主力净流入从高到低排序；页面会每 60 秒自动刷新一次。</div>
+        </div>
+        <div class="sector-flow-actions">
+          <div class="meta">前十合计：<strong id="sector-flow-total">--</strong></div>
+          <button id="sector-flow-refresh" class="sector-flow-refresh" type="button">刷新</button>
+        </div>
+      </div>
+      <div class="chart-frame"><div id="sector-flow-chart" class="chart-canvas sector-flow-chart" aria-label="行业板块主力净流入前十图表"></div></div>
+      <div class="legend">
+        <span class="buy">净流入</span>
+        <span class="sell">净流出</span>
+        <span class="band">主力净占比</span>
+      </div>
+      <div class="trade-section sector-flow-table-section">
+        <div class="section-header trade-header">
+          <div>
+            <h2>资金明细</h2>
+            <div class="meta">金额字段使用元换算，净占比为东方财富返回的实时统计口径。</div>
+          </div>
+        </div>
+        <div class="trade-table-wrap">
+          <table class="trade-table sector-flow-table">
+            <thead>
+              <tr><th>排名</th><th>板块</th><th>涨跌幅</th><th>主力净流入</th><th>主力净占比</th><th>超大单净额</th><th>大单净额</th></tr>
+            </thead>
+            <tbody id="sector-flow-list"></tbody>
+          </table>
+        </div>
+        <div id="sector-flow-empty" class="meta">暂无板块资金数据。</div>
       </div>
       <div id="error" class="error" hidden></div>
     </section>
