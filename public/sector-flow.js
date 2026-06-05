@@ -130,6 +130,10 @@ function isWithinAutoRefreshWindow() {
   return minutes >= AUTO_REFRESH_START_MINUTES && minutes <= AUTO_REFRESH_END_MINUTES;
 }
 
+function getRefreshWindowText() {
+  return '09:25-15:05';
+}
+
 function getNextShanghaiForceRefreshDelayMs() {
   const now = getShanghaiNowMs();
   const parts = getShanghaiDateParts();
@@ -530,6 +534,12 @@ function getPayloadTradingDate(payload) {
 
 async function loadSectorFlowHistory(date = activeHistoryDate || formatShanghaiDate()) {
   const errorBox = getEl('error');
+  if (!isWithinAutoRefreshWindow()) {
+    setHistoryLoading(false);
+    setHistoryStatus(`当前不在 ${getRefreshWindowText()}，已暂停历史数据请求。`);
+    return;
+  }
+
   if (historyAbortController) {
     historyAbortController.abort();
   }
@@ -569,6 +579,17 @@ async function loadSectorFlowHistory(date = activeHistoryDate || formatShanghaiD
 
 async function loadSectorFlow({ silent = false } = {}) {
   const errorBox = getEl('error');
+  if (!isWithinAutoRefreshWindow()) {
+    setLoading(false);
+    setHistoryLoading(false);
+    setText('sector-flow-status', `非请求时段 ${getRefreshWindowText()}`);
+    setHistoryStatus(`当前不在 ${getRefreshWindowText()}，已暂停板块资金请求。`);
+    if (errorBox && !silent) {
+      errorBox.hidden = true;
+    }
+    return;
+  }
+
   if (abortController) {
     abortController.abort();
   }
