@@ -2,11 +2,25 @@ const SUPABASE_URL = process.env.SUPABASE_URL || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 function isSupabaseConfigured() {
-  return Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
+  return Boolean(SUPABASE_URL.trim() && SUPABASE_SERVICE_ROLE_KEY);
+}
+
+function getSupabaseOrigin() {
+  try {
+    const parsed = new URL(SUPABASE_URL.trim());
+    if (!/^https?:$/.test(parsed.protocol)) {
+      throw new Error('Supabase URL must use http or https.');
+    }
+    return parsed.origin;
+  } catch (error) {
+    const wrapped = new Error(`Invalid SUPABASE_URL: ${error.message}`);
+    wrapped.code = 'SUPABASE_INVALID_URL';
+    throw wrapped;
+  }
 }
 
 function getSupabaseRestUrl(path) {
-  return `${SUPABASE_URL.replace(/\/+$/, '')}/rest/v1/${path.replace(/^\/+/, '')}`;
+  return new URL(`/rest/v1/${path.replace(/^\/+/, '')}`, getSupabaseOrigin()).toString();
 }
 
 function buildHeaders(extra = {}) {

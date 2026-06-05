@@ -20,13 +20,13 @@
   status = 200
 
 [[redirects]]
-  from = "/api/sector-fund-flow"
-  to = "/.netlify/functions/sector-fund-flow"
+  from = "/api/sector-fund-flow/history"
+  to = "/.netlify/functions/sector-fund-flow-history"
   status = 200
 
 [[redirects]]
-  from = "/api/sector-fund-flow/history"
-  to = "/.netlify/functions/sector-fund-flow-history"
+  from = "/api/sector-fund-flow"
+  to = "/.netlify/functions/sector-fund-flow"
   status = 200
 
 [[redirects]]
