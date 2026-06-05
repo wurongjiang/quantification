@@ -1,12 +1,9 @@
-const REFRESH_INTERVAL_MS = 60 * 1000;
-
 const numberFormatter = new Intl.NumberFormat('zh-CN', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2
 });
 
 let chartInstance = null;
-let refreshTimer = null;
 let abortController = null;
 
 function cssVar(name) {
@@ -242,7 +239,7 @@ function renderSummary(payload) {
   setText('sector-flow-leader-money', leader ? formatMoney(leader.mainNetInflow) : '--');
   setText('sector-flow-status', leader ? `主力净占比 ${formatPercent(leader.mainNetInflowPct)}` : '暂无数据');
   setText('sector-flow-updated', payload.updatedAt || '--');
-  setText('sector-flow-count', String(items.length));
+  setText('sector-flow-count', payload.total ? `${items.length}/${payload.total}` : String(items.length));
   setText('sector-flow-positive-count', String(positiveCount));
   setText('sector-flow-total', formatMoney(totalInflow));
 
@@ -305,10 +302,6 @@ async function loadSectorFlow({ silent = false } = {}) {
 }
 
 function destroy() {
-  if (refreshTimer) {
-    clearInterval(refreshTimer);
-    refreshTimer = null;
-  }
   if (abortController) {
     abortController.abort();
     abortController = null;
@@ -328,7 +321,6 @@ async function init() {
   }
 
   await loadSectorFlow();
-  refreshTimer = setInterval(() => loadSectorFlow({ silent: true }), REFRESH_INTERVAL_MS);
   return destroy;
 }
 

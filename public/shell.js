@@ -67,11 +67,11 @@ const templates = {
   'sector-flow': `
     <section class="hero sector-flow-hero">
       <article class="panel hero-copy">
-        <div class="badge">Eastmoney 数据源 / 行业板块 / 今日资金</div>
+        <div class="badge">Eastmoney 数据源 / 主流板块池 / 今日资金</div>
         <h1>今日板块资金流向</h1>
-        <p>展示行业板块主力净流入前十名，盘中按东方财富实时资金流数据滚动更新，适合快速观察当日资金最集中的方向。</p>
+        <p>展示你选定的 20 个主流板块，盘中按东方财富实时资金流数据滚动更新，并按主力净流入从高到低排序。</p>
         <div class="hero-signals" aria-label="板块资金口径">
-          <span>行业板块</span><span>主力净流入排序</span><span>前十名</span>
+          <span>20 个主流板块</span><span>主力净流入排序</span><span>行业 + 概念口径</span>
         </div>
       </article>
       <aside class="panel summary">
@@ -100,15 +100,15 @@ const templates = {
     <section class="panel section">
       <div class="section-header">
         <div>
-          <h2>行业板块资金前十</h2>
-          <div class="meta">按主力净流入从高到低排序；页面会每 60 秒自动刷新一次。</div>
+          <h2>主流板块资金排序</h2>
+          <div class="meta">在固定 20 个板块池内按主力净流入从高到低排序；点击刷新按钮获取最新数据。</div>
         </div>
         <div class="sector-flow-actions">
-          <div class="meta">前十合计：<strong id="sector-flow-total">--</strong></div>
+          <div class="meta">板块池合计：<strong id="sector-flow-total">--</strong></div>
           <button id="sector-flow-refresh" class="sector-flow-refresh" type="button">刷新</button>
         </div>
       </div>
-      <div class="chart-frame"><div id="sector-flow-chart" class="chart-canvas sector-flow-chart" aria-label="行业板块主力净流入前十图表"></div></div>
+      <div class="chart-frame"><div id="sector-flow-chart" class="chart-canvas sector-flow-chart" aria-label="主流板块主力净流入排序图表"></div></div>
       <div class="legend">
         <span class="buy">净流入</span>
         <span class="sell">净流出</span>
@@ -118,7 +118,7 @@ const templates = {
         <div class="section-header trade-header">
           <div>
             <h2>资金明细</h2>
-            <div class="meta">金额字段使用元换算，净占比为东方财富返回的实时统计口径。</div>
+            <div class="meta">金额字段使用元换算，净占比为东方财富返回的实时统计口径；名称为主流板块池标准名称。</div>
           </div>
         </div>
         <div class="trade-table-wrap">
