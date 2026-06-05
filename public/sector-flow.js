@@ -16,6 +16,7 @@ let lastAutoRefreshMinuteKey = '';
 const AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
 const AUTO_REFRESH_START_MINUTES = 9 * 60 + 25;
 const AUTO_REFRESH_END_MINUTES = 15 * 60 + 5;
+const MIN_REALTIME_FETCH_INTERVAL_MS = 5 * 60 * 1000;
 const FORCE_REFRESH_HOUR = 14;
 const FORCE_REFRESH_MINUTE = 55;
 
@@ -534,12 +535,6 @@ function getPayloadTradingDate(payload) {
 
 async function loadSectorFlowHistory(date = activeHistoryDate || formatShanghaiDate()) {
   const errorBox = getEl('error');
-  if (!isWithinAutoRefreshWindow()) {
-    setHistoryLoading(false);
-    setHistoryStatus(`当前不在 ${getRefreshWindowText()}，已暂停历史数据请求。`);
-    return;
-  }
-
   if (historyAbortController) {
     historyAbortController.abort();
   }
@@ -577,17 +572,124 @@ async function loadSectorFlowHistory(date = activeHistoryDate || formatShanghaiD
   }
 }
 
+function buildSavedSectorFlowPayload(historyPayload) {
+  const snapshots = historyPayload.snapshots || [];
+  const latestSnapshot = snapshots[snapshots.length - 1] || null;
+  const items = latestSnapshot
+    ? (latestSnapshot.items || []).map((item, index) => ({
+      rank: Number.isFinite(item.rank) ? item.rank : index + 1,
+      key: item.code,
+      code: item.code,
+      name: item.name,
+      rawName: item.name,
+      sourceType: 'saved',
+      changePct: Number.isFinite(item.changePct) ? item.changePct : null,
+      mainNetInflow: Number.isFinite(item.mainNetInflow) ? item.mainNetInflow : null,
+      mainNetInflowPct: Number.isFinite(item.mainNetInflowPct) ? item.mainNetInflowPct : null,
+      superNetInflow: null,
+      bigNetInflow: null,
+      updatedAt: latestSnapshot.capturedAt ? formatTimeLabel(latestSnapshot.capturedAt) : historyPayload.date
+    }))
+    : [];
+
+  return {
+    source: 'Supabase sector flow history',
+    sectorType: 'saved',
+    sortBy: 'mainNetInflow',
+    total: historyPayload.sectorCount || items.length,
+    updatedAt: latestSnapshot ? formatTimeLabel(latestSnapshot.capturedAt) : '--',
+    items
+  };
+}
+
+function getLatestHistorySnapshot(historyPayload) {
+  const snapshots = historyPayload && Array.isArray(historyPayload.snapshots) ? historyPayload.snapshots : [];
+  return snapshots[snapshots.length - 1] || null;
+}
+
+function getSnapshotAgeMs(snapshot) {
+  if (!snapshot || !snapshot.capturedAt) {
+    return Infinity;
+  }
+
+  const capturedAtMs = new Date(snapshot.capturedAt).getTime();
+  if (!Number.isFinite(capturedAtMs)) {
+    return Infinity;
+  }
+
+  return Math.max(0, Date.now() - capturedAtMs);
+}
+
+function isRecentHistoryPayload(historyPayload) {
+  return getSnapshotAgeMs(getLatestHistorySnapshot(historyPayload)) < MIN_REALTIME_FETCH_INTERVAL_MS;
+}
+
+function renderSavedSectorFlow(historyPayload, statusText) {
+  if (!historyPayload.snapshots || !historyPayload.snapshots.length) {
+    throw new Error(`${historyPayload.date} 暂无已保存的板块资金快照。`);
+  }
+
+  const payload = buildSavedSectorFlowPayload(historyPayload);
+  if (!payload.items.length) {
+    throw new Error(`${historyPayload.date} 暂无可展示的板块资金明细。`);
+  }
+
+  renderSummary(payload);
+  renderChart(payload.items);
+  renderTable(payload.items);
+  renderHistoryChart(historyPayload);
+  setHistoryStatus(statusText || `${historyPayload.date} 已展示最新保存快照，共 ${historyPayload.totalSnapshots} 次请求记录。`);
+}
+
+async function loadSavedSectorFlow(date = formatShanghaiDate()) {
+  const historyPayload = await fetchJson(`/api/sector-fund-flow/history?date=${encodeURIComponent(date)}`);
+  renderSavedSectorFlow(historyPayload);
+}
+
 async function loadSectorFlow({ silent = false } = {}) {
   const errorBox = getEl('error');
+  const historyDateInput = getEl('sector-flow-history-date');
+  const date = historyDateInput && historyDateInput.value ? historyDateInput.value : formatShanghaiDate();
   if (!isWithinAutoRefreshWindow()) {
-    setLoading(false);
-    setHistoryLoading(false);
-    setText('sector-flow-status', `非请求时段 ${getRefreshWindowText()}`);
-    setHistoryStatus(`当前不在 ${getRefreshWindowText()}，已暂停板块资金请求。`);
     if (errorBox && !silent) {
       errorBox.hidden = true;
     }
+    setLoading(true);
+    setHistoryLoading(true);
+    setText('sector-flow-status', `非实时请求时段 ${getRefreshWindowText()}`);
+    setHistoryStatus(`当前不在 ${getRefreshWindowText()}，读取今日已保存快照...`);
+    try {
+      await loadSavedSectorFlow(date);
+    } catch (error) {
+      if (errorBox && !silent) {
+        errorBox.hidden = false;
+        errorBox.textContent = `加载失败：${error.message}`;
+      }
+      setHistoryStatus(`已暂停实时请求；${error.message}`);
+    } finally {
+      setLoading(false);
+      setHistoryLoading(false);
+    }
     return;
+  }
+
+  try {
+    const historyPayload = await fetchJson(`/api/sector-fund-flow/history?date=${encodeURIComponent(date)}`);
+    if (isRecentHistoryPayload(historyPayload)) {
+      const latestSnapshot = getLatestHistorySnapshot(historyPayload);
+      renderSavedSectorFlow(
+        historyPayload,
+        `${date} 最新快照 ${formatTimeLabel(latestSnapshot.capturedAt)} 距当前不足 5 分钟，已复用保存数据。`
+      );
+      if (errorBox && !silent) {
+        errorBox.hidden = true;
+      }
+      setLoading(false);
+      setHistoryLoading(false);
+      return;
+    }
+  } catch (error) {
+    setHistoryStatus(`历史快照预检查失败，继续请求实时数据：${error.message}`);
   }
 
   if (abortController) {
