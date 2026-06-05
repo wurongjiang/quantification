@@ -9,6 +9,15 @@ let abortController = null;
 let historyAbortController = null;
 let activeHistoryDate = '';
 let historyDateTouched = false;
+let autoRefreshTimer = null;
+let forceRefreshTimer = null;
+let lastAutoRefreshMinuteKey = '';
+
+const AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
+const AUTO_REFRESH_START_MINUTES = 9 * 60 + 25;
+const AUTO_REFRESH_END_MINUTES = 15 * 60 + 5;
+const FORCE_REFRESH_HOUR = 14;
+const FORCE_REFRESH_MINUTE = 55;
 
 function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -78,6 +87,66 @@ function formatTimeLabel(value) {
     minute: '2-digit',
     hour12: false
   });
+}
+
+function getShanghaiDateParts(date = new Date()) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23'
+  });
+  return Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]));
+}
+
+function getShanghaiNowMs() {
+  const parts = getShanghaiDateParts();
+  return Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    Number(parts.hour),
+    Number(parts.minute),
+    Number(parts.second)
+  );
+}
+
+function getShanghaiMinutesOfDay() {
+  const parts = getShanghaiDateParts();
+  return Number(parts.hour) * 60 + Number(parts.minute);
+}
+
+function getShanghaiMinuteKey() {
+  const parts = getShanghaiDateParts();
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
+function isWithinAutoRefreshWindow() {
+  const minutes = getShanghaiMinutesOfDay();
+  return minutes >= AUTO_REFRESH_START_MINUTES && minutes <= AUTO_REFRESH_END_MINUTES;
+}
+
+function getNextShanghaiForceRefreshDelayMs() {
+  const now = getShanghaiNowMs();
+  const parts = getShanghaiDateParts();
+  let target = Date.UTC(
+    Number(parts.year),
+    Number(parts.month) - 1,
+    Number(parts.day),
+    FORCE_REFRESH_HOUR,
+    FORCE_REFRESH_MINUTE,
+    0
+  );
+
+  if (target <= now) {
+    target += 24 * 60 * 60 * 1000;
+  }
+
+  return target - now;
 }
 
 function trendClass(value) {
@@ -544,6 +613,42 @@ async function loadSectorFlow({ silent = false } = {}) {
   }
 }
 
+function runScheduledSectorFlowRefresh() {
+  if (!isWithinAutoRefreshWindow()) {
+    return;
+  }
+
+  const minuteKey = getShanghaiMinuteKey();
+  if (minuteKey === lastAutoRefreshMinuteKey) {
+    return;
+  }
+
+  lastAutoRefreshMinuteKey = minuteKey;
+  loadSectorFlow({ silent: true });
+}
+
+function scheduleForceRefresh() {
+  if (forceRefreshTimer) {
+    clearTimeout(forceRefreshTimer);
+  }
+
+  forceRefreshTimer = window.setTimeout(() => {
+    runScheduledSectorFlowRefresh();
+    scheduleForceRefresh();
+  }, getNextShanghaiForceRefreshDelayMs());
+}
+
+function startAutoRefresh() {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+  }
+
+  autoRefreshTimer = window.setInterval(() => {
+    runScheduledSectorFlowRefresh();
+  }, AUTO_REFRESH_INTERVAL_MS);
+  scheduleForceRefresh();
+}
+
 function destroy() {
   if (abortController) {
     abortController.abort();
@@ -553,6 +658,15 @@ function destroy() {
     historyAbortController.abort();
     historyAbortController = null;
   }
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
+  if (forceRefreshTimer) {
+    clearTimeout(forceRefreshTimer);
+    forceRefreshTimer = null;
+  }
+  lastAutoRefreshMinuteKey = '';
   window.removeEventListener('resize', resizeChart);
   if (chartInstance) {
     chartInstance.dispose();
@@ -592,6 +706,7 @@ async function init() {
   }
 
   await loadSectorFlow();
+  startAutoRefresh();
   return destroy;
 }
 
