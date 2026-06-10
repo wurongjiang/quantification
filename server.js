@@ -3,6 +3,34 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
+
+function loadLocalEnvFile(fileName) {
+  const filePath = path.join(__dirname, fileName);
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+
+  const content = fs.readFileSync(filePath, 'utf8');
+  content.split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#') || !trimmed.includes('=')) {
+      return;
+    }
+
+    const equalIndex = trimmed.indexOf('=');
+    const key = trimmed.slice(0, equalIndex).trim();
+    const rawValue = trimmed.slice(equalIndex + 1).trim();
+    if (!key || process.env[key] !== undefined) {
+      return;
+    }
+
+    process.env[key] = rawValue.replace(/^['"]|['"]$/g, '');
+  });
+}
+
+loadLocalEnvFile('.env.local');
+loadLocalEnvFile('.env');
+
 const {
   buildSummaryFileName,
   buildSummaryPublicPath,
@@ -14,6 +42,7 @@ const {
 const {
   getShanghaiDate,
   persistSectorFlowPayload,
+  readSectorDailyFlowHistory,
   readSectorFlowHistory
 } = require('./lib/sectorFlowStore');
 
@@ -617,6 +646,32 @@ const server = http.createServer((req, res) => {
         const statusCode = error.code === 'SUPABASE_NOT_CONFIGURED' ? 503 : 500;
         logSectorFlowError('history request failed', error, { date });
         sendJson(res, statusCode, { error: error.message });
+      });
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/sector-fund-flow/daily-history') {
+    const code = requestUrl.searchParams.get('code') || '';
+    const startDate = requestUrl.searchParams.get('startDate') || '';
+    const endDate = requestUrl.searchParams.get('endDate') || '';
+    if (!code) {
+      sendJson(res, 400, { error: 'Missing required parameter: code' });
+      return;
+    }
+
+    readSectorDailyFlowHistory(code, {
+      startDate: startDate || null,
+      endDate: endDate || null
+    })
+      .then((payload) => sendJson(res, 200, payload))
+      .catch((error) => {
+        const statusCode = error.code === 'SUPABASE_NOT_CONFIGURED'
+          ? 503
+          : /^Invalid /.test(error.message || '')
+            ? 400
+            : 500;
+        logSectorFlowError('daily history request failed', error, { code, startDate, endDate });
+        sendJson(res, statusCode, { error: error.message, code: error.code || null });
       });
     return;
   }

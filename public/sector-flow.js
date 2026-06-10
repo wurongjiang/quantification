@@ -7,8 +7,7 @@ let chartInstance = null;
 let historyChartInstance = null;
 let abortController = null;
 let historyAbortController = null;
-let activeHistoryDate = '';
-let historyDateTouched = false;
+let activeSectorCode = 'BK1283';
 let autoRefreshTimer = null;
 let forceRefreshTimer = null;
 let lastAutoRefreshMinuteKey = '';
@@ -19,6 +18,28 @@ const AUTO_REFRESH_END_MINUTES = 15 * 60 + 5;
 const MIN_REALTIME_FETCH_INTERVAL_MS = 5 * 60 * 1000;
 const FORCE_REFRESH_HOUR = 14;
 const FORCE_REFRESH_MINUTE = 55;
+const MAINSTREAM_SECTORS = [
+  { key: 'bank', displayName: '银行', code: 'BK1283', sourceType: 'industry' },
+  { key: 'securities', displayName: '证券', code: 'BK0473', sourceType: 'industry' },
+  { key: 'baijiu', displayName: '白酒', code: 'BK0896', sourceType: 'concept' },
+  { key: 'food-beverage', displayName: '食品饮料', code: 'BK0438', sourceType: 'industry' },
+  { key: 'innovative-drug', displayName: '创新药', code: 'BK1106', sourceType: 'concept' },
+  { key: 'robotics', displayName: '机器人', code: 'BK1408', sourceType: 'industry' },
+  { key: 'semiconductor', displayName: '半导体', code: 'BK1036', sourceType: 'industry' },
+  { key: 'consumer-electronics', displayName: '消费电子', code: 'BK1037', sourceType: 'industry' },
+  { key: 'software', displayName: '软件开发', code: 'BK0737', sourceType: 'industry' },
+  { key: 'communication-equipment', displayName: '通信设备', code: 'BK0448', sourceType: 'industry' },
+  { key: 'optical-module', displayName: '光模块', code: 'BK1136', sourceType: 'concept' },
+  { key: 'battery', displayName: '电池', code: 'BK1033', sourceType: 'industry' },
+  { key: 'photovoltaic-equipment', displayName: '光伏设备', code: 'BK1031', sourceType: 'industry' },
+  { key: 'vehicle', displayName: '汽车整车', code: 'BK1029', sourceType: 'concept' },
+  { key: 'auto-parts', displayName: '汽车零部件', code: 'BK0481', sourceType: 'industry' },
+  { key: 'defense', displayName: '国防军工', code: 'BK1204', sourceType: 'industry' },
+  { key: 'coal', displayName: '煤炭行业', code: 'BK0437', sourceType: 'industry' },
+  { key: 'nonferrous', displayName: '有色金属', code: 'BK0478', sourceType: 'industry' },
+  { key: 'rare-earth', displayName: '稀土', code: 'BK1626', sourceType: 'industry' },
+  { key: 'power', displayName: '电力行业', code: 'BK0428', sourceType: 'industry' }
+];
 
 function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
@@ -84,6 +105,23 @@ function formatTimeLabel(value) {
 
   return date.toLocaleTimeString('zh-CN', {
     timeZone: 'Asia/Shanghai',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+}
+
+function formatDateTimeLabel(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value || '--';
+  }
+
+  return date.toLocaleString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
     hour12: false
@@ -191,7 +229,10 @@ async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.error || `Request failed with ${response.status}`);
+    const error = new Error(payload.error || `Request failed with ${response.status}`);
+    error.code = payload.code || null;
+    error.status = response.status;
+    throw error;
   }
   return payload;
 }
@@ -283,37 +324,26 @@ function buildOption(items) {
 }
 
 function buildHistoryOption(payload) {
-  const snapshots = payload.snapshots || [];
-  const sectors = payload.sectors || [];
-  const times = snapshots.map((snapshot) => snapshot.capturedAt);
+  const records = payload.records || [];
+  const dates = records.map((record) => record.tradingDate);
   const mutedColor = cssVar('--muted') || '#687789';
   const axisColor = 'rgba(104, 119, 137, 0.26)';
   const splitColor = 'rgba(104, 119, 137, 0.14)';
-  const palette = [
-    '#2563eb',
-    '#0d9488',
-    '#d97706',
-    '#7c3aed',
-    '#dc2626',
-    '#0891b2',
-    '#65a30d',
-    '#c2410c',
-    '#4f46e5',
-    '#be123c'
-  ];
+  const sector = MAINSTREAM_SECTORS.find((item) => item.code === payload.code);
+  const sectorName = payload.name || (sector && sector.displayName) || payload.code || '板块';
 
   return {
     animation: true,
     backgroundColor: 'transparent',
-    color: palette,
+    color: ['#2563eb', '#0d9488'],
     grid: {
       left: 78,
       right: 34,
-      top: 78,
+      top: 58,
       bottom: 72
     },
     legend: {
-      type: 'scroll',
+      show: true,
       top: 18,
       left: 16,
       right: 16,
@@ -330,8 +360,17 @@ function buildHistoryOption(payload) {
       textStyle: {
         color: '#fdf8f1'
       },
-      valueFormatter(value) {
-        return formatMoney(value);
+      formatter(params) {
+        const index = params && params[0] ? params[0].dataIndex : 0;
+        const record = records[index] || {};
+        return [
+          `<div style="margin-bottom:6px;font-weight:600;">${escapeHtml(sectorName)} ${escapeHtml(record.tradingDate || '--')}</div>`,
+          `最晚快照: ${escapeHtml(record.capturedAt ? formatDateTimeLabel(record.capturedAt) : '--')}`,
+          `当日排名: ${Number.isFinite(record.rank) ? record.rank : '--'}`,
+          `涨跌幅: ${formatPercent(record.changePct)}`,
+          `主力净流入: ${formatMoney(record.mainNetInflow)}`,
+          `主力净占比: ${formatPercent(record.mainNetInflowPct)}`
+        ].join('<br>');
       },
       axisPointer: {
         type: 'line'
@@ -359,9 +398,10 @@ function buildHistoryOption(payload) {
     xAxis: {
       type: 'category',
       boundaryGap: false,
-      data: times.map(formatTimeLabel),
+      data: dates,
       axisLabel: {
-        color: mutedColor
+        color: mutedColor,
+        hideOverlap: true
       },
       axisLine: { lineStyle: { color: axisColor } },
       axisTick: { show: false }
@@ -379,24 +419,31 @@ function buildHistoryOption(payload) {
         lineStyle: { color: splitColor, type: 'dashed' }
       }
     },
-    series: sectors.map((sector) => ({
-      name: sector.name,
-      type: 'line',
-      smooth: true,
-      symbol: 'circle',
-      symbolSize: 5,
-      connectNulls: true,
-      emphasis: {
-        focus: 'series'
-      },
-      lineStyle: {
-        width: 2
-      },
-      data: snapshots.map((snapshot) => {
-        const item = (snapshot.items || []).find((entry) => entry.code === sector.code);
-        return item && Number.isFinite(item.mainNetInflow) ? item.mainNetInflow : null;
-      })
-    }))
+    series: [
+      {
+        name: `${sectorName} 主力净流入`,
+        type: 'line',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 6,
+        connectNulls: true,
+        emphasis: {
+          focus: 'series'
+        },
+        lineStyle: {
+          width: 2
+        },
+        areaStyle: {
+          opacity: 0.08
+        },
+        itemStyle: {
+          color(params) {
+            return flowColor(params.value);
+          }
+        },
+        data: records.map((record) => (Number.isFinite(record.mainNetInflow) ? record.mainNetInflow : null))
+      }
+    ]
   };
 }
 
@@ -502,68 +549,110 @@ function setLoading(isLoading) {
 }
 
 function setHistoryLoading(isLoading) {
-  const button = getEl('sector-flow-history-apply');
-  if (button) {
-    button.disabled = isLoading;
-    button.textContent = isLoading ? '加载中' : '查看';
-  }
+  const tabs = document.querySelectorAll('.sector-flow-sector-tab');
+  tabs.forEach((tab) => {
+    tab.disabled = isLoading && tab.dataset.code !== activeSectorCode;
+  });
 }
 
 function setHistoryStatus(text) {
   setText('sector-flow-history-status', text);
 }
 
-function getPayloadTradingDate(payload) {
-  if (payload.persistence && payload.persistence.tradingDate) {
-    return payload.persistence.tradingDate;
-  }
-
-  const itemDate = (payload.items || [])
-    .map((item) => item.updatedAt)
-    .find((value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value));
-
-  if (itemDate) {
-    return itemDate.slice(0, 10);
-  }
-
-  if (payload.updatedAt && /^\d{4}-\d{2}-\d{2}/.test(payload.updatedAt)) {
-    return payload.updatedAt.slice(0, 10);
-  }
-
-  return formatShanghaiDate();
+function getActiveSector() {
+  return MAINSTREAM_SECTORS.find((sector) => sector.code === activeSectorCode) || MAINSTREAM_SECTORS[0];
 }
 
-async function loadSectorFlowHistory(date = activeHistoryDate || formatShanghaiDate()) {
+function renderSectorTabs() {
+  const tabsRoot = getEl('sector-flow-sector-tabs');
+  if (!tabsRoot) {
+    return;
+  }
+
+  tabsRoot.innerHTML = '';
+  MAINSTREAM_SECTORS.forEach((sector) => {
+    const button = document.createElement('button');
+    const isActive = sector.code === activeSectorCode;
+    button.type = 'button';
+    button.className = `sector-flow-sector-tab${isActive ? ' is-active' : ''}`;
+    button.dataset.code = sector.code;
+    button.setAttribute('role', 'tab');
+    button.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    button.textContent = sector.displayName;
+    button.addEventListener('click', () => {
+      if (activeSectorCode === sector.code) {
+        return;
+      }
+      activeSectorCode = sector.code;
+      renderSectorTabs();
+      loadSectorDailyHistory(sector.code);
+    });
+    tabsRoot.appendChild(button);
+  });
+}
+
+function renderDailyHistoryTable(records) {
+  const tableBody = getEl('sector-flow-history-list');
+  const empty = getEl('sector-flow-history-empty');
+  if (!tableBody || !empty) {
+    return;
+  }
+
+  tableBody.innerHTML = '';
+  empty.hidden = records.length > 0;
+
+  records.slice().reverse().forEach((record) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${escapeHtml(record.tradingDate || '--')}</td>
+      <td>${escapeHtml(record.capturedAt ? formatDateTimeLabel(record.capturedAt) : '--')}</td>
+      <td><span class="sector-rank">${Number.isFinite(record.rank) ? record.rank : '--'}</span></td>
+      <td class="${trendClass(record.changePct)}">${formatPercent(record.changePct)}</td>
+      <td class="${trendClass(record.mainNetInflow)}">${formatMoney(record.mainNetInflow)}</td>
+      <td class="${trendClass(record.mainNetInflowPct)}">${formatPercent(record.mainNetInflowPct)}</td>
+    `;
+    tableBody.appendChild(tr);
+  });
+}
+
+async function loadSectorDailyHistory(code = activeSectorCode) {
   const errorBox = getEl('error');
   if (historyAbortController) {
     historyAbortController.abort();
   }
   historyAbortController = new AbortController();
-  activeHistoryDate = date;
+  activeSectorCode = code;
+  const sector = getActiveSector();
   setHistoryLoading(true);
-  setHistoryStatus(`${date} 历史快照加载中...`);
+  setHistoryStatus(`${sector.displayName} 历史资金流向加载中...`);
 
   try {
-    const payload = await fetchJson(`/api/sector-fund-flow/history?date=${encodeURIComponent(date)}`, {
+    const payload = await fetchJson(`/api/sector-fund-flow/daily-history?code=${encodeURIComponent(code)}`, {
       signal: historyAbortController.signal
     });
+    const records = payload.records || [];
 
-    if (!payload.snapshots || !payload.snapshots.length) {
+    if (!records.length) {
       if (historyChartInstance) {
         historyChartInstance.clear();
       }
-      setHistoryStatus(`${date} 暂无已保存的板块资金快照。`);
+      renderDailyHistoryTable([]);
+      setHistoryStatus(`${sector.displayName} 暂无历史资金数据。`);
       return;
     }
 
     renderHistoryChart(payload);
-    setHistoryStatus(`${date} 已保存 ${payload.totalSnapshots} 次请求快照，覆盖 ${payload.sectorCount} 个板块。`);
+    renderDailyHistoryTable(records);
+    setHistoryStatus(`${sector.displayName} 已展示 ${payload.totalDays} 个交易日；每天取当天最晚一条快照。`);
   } catch (error) {
     if (error.name === 'AbortError') {
       return;
     }
-    setHistoryStatus(`历史数据加载失败：${error.message}`);
-    if (errorBox && /Invalid date/.test(error.message)) {
+    const message = error.code === 'SUPABASE_NOT_CONFIGURED'
+      ? '历史数据加载失败：数据库连接未配置，请配置 SUPABASE_URL 和 SUPABASE_SERVICE_ROLE_KEY。'
+      : `历史数据加载失败：${error.message}`;
+    setHistoryStatus(message);
+    if (errorBox && /^Invalid /.test(error.message)) {
       errorBox.hidden = false;
       errorBox.textContent = `加载失败：${error.message}`;
     }
@@ -624,7 +713,7 @@ function isRecentHistoryPayload(historyPayload) {
   return getSnapshotAgeMs(getLatestHistorySnapshot(historyPayload)) < MIN_REALTIME_FETCH_INTERVAL_MS;
 }
 
-function renderSavedSectorFlow(historyPayload, statusText) {
+async function renderSavedSectorFlow(historyPayload) {
   if (!historyPayload.snapshots || !historyPayload.snapshots.length) {
     throw new Error(`${historyPayload.date} 暂无已保存的板块资金快照。`);
   }
@@ -637,27 +726,22 @@ function renderSavedSectorFlow(historyPayload, statusText) {
   renderSummary(payload);
   renderChart(payload.items);
   renderTable(payload.items);
-  renderHistoryChart(historyPayload);
-  setHistoryStatus(statusText || `${historyPayload.date} 已展示最新保存快照，共 ${historyPayload.totalSnapshots} 次请求记录。`);
 }
 
 async function loadSavedSectorFlow(date = formatShanghaiDate()) {
   const historyPayload = await fetchJson(`/api/sector-fund-flow/history?date=${encodeURIComponent(date)}`);
-  renderSavedSectorFlow(historyPayload);
+  await renderSavedSectorFlow(historyPayload);
 }
 
 async function loadSectorFlow({ silent = false } = {}) {
   const errorBox = getEl('error');
-  const historyDateInput = getEl('sector-flow-history-date');
-  const date = historyDateInput && historyDateInput.value ? historyDateInput.value : formatShanghaiDate();
+  const date = formatShanghaiDate();
   if (!isWithinAutoRefreshWindow()) {
     if (errorBox && !silent) {
       errorBox.hidden = true;
     }
     setLoading(true);
-    setHistoryLoading(true);
     setText('sector-flow-status', `非实时请求时段 ${getRefreshWindowText()}`);
-    setHistoryStatus(`当前不在 ${getRefreshWindowText()}，读取今日已保存快照...`);
     try {
       await loadSavedSectorFlow(date);
     } catch (error) {
@@ -665,10 +749,8 @@ async function loadSectorFlow({ silent = false } = {}) {
         errorBox.hidden = false;
         errorBox.textContent = `加载失败：${error.message}`;
       }
-      setHistoryStatus(`已暂停实时请求；${error.message}`);
     } finally {
       setLoading(false);
-      setHistoryLoading(false);
     }
     return;
   }
@@ -676,20 +758,17 @@ async function loadSectorFlow({ silent = false } = {}) {
   try {
     const historyPayload = await fetchJson(`/api/sector-fund-flow/history?date=${encodeURIComponent(date)}`);
     if (isRecentHistoryPayload(historyPayload)) {
-      const latestSnapshot = getLatestHistorySnapshot(historyPayload);
-      renderSavedSectorFlow(
-        historyPayload,
-        `${date} 最新快照 ${formatTimeLabel(latestSnapshot.capturedAt)} 距当前不足 5 分钟，已复用保存数据。`
-      );
+      await renderSavedSectorFlow(historyPayload);
       if (errorBox && !silent) {
         errorBox.hidden = true;
       }
       setLoading(false);
-      setHistoryLoading(false);
       return;
     }
   } catch (error) {
-    setHistoryStatus(`历史快照预检查失败，继续请求实时数据：${error.message}`);
+    if (!silent) {
+      setText('sector-flow-status', `历史快照预检查失败，继续请求实时数据`);
+    }
   }
 
   if (abortController) {
@@ -715,14 +794,6 @@ async function loadSectorFlow({ silent = false } = {}) {
     renderSummary(payload);
     renderChart(items);
     renderTable(items);
-
-    const tradingDate = getPayloadTradingDate(payload);
-    const historyDateInput = getEl('sector-flow-history-date');
-    if (historyDateInput && !historyDateTouched) {
-      historyDateInput.value = tradingDate;
-      activeHistoryDate = tradingDate;
-    }
-    await loadSectorFlowHistory((historyDateInput && historyDateInput.value) || tradingDate);
   } catch (error) {
     if (error.name === 'AbortError') {
       return;
@@ -803,32 +874,20 @@ function destroy() {
 
 async function init() {
   destroy();
-  const historyDateInput = getEl('sector-flow-history-date');
-  if (historyDateInput) {
-    activeHistoryDate = formatShanghaiDate();
-    historyDateInput.value = activeHistoryDate;
-  }
-
+  activeSectorCode = MAINSTREAM_SECTORS[0].code;
+  renderSectorTabs();
   const refreshButton = getEl('sector-flow-refresh');
   if (refreshButton) {
-    refreshButton.addEventListener('click', () => loadSectorFlow());
-  }
-  const historyApplyButton = getEl('sector-flow-history-apply');
-  if (historyApplyButton) {
-    historyApplyButton.addEventListener('click', () => {
-      historyDateTouched = true;
-      const date = historyDateInput && historyDateInput.value ? historyDateInput.value : formatShanghaiDate();
-      loadSectorFlowHistory(date);
-    });
-  }
-  if (historyDateInput) {
-    historyDateInput.addEventListener('change', () => {
-      historyDateTouched = true;
-      loadSectorFlowHistory(historyDateInput.value || formatShanghaiDate());
+    refreshButton.addEventListener('click', async () => {
+      await loadSectorFlow();
+      await loadSectorDailyHistory(activeSectorCode);
     });
   }
 
-  await loadSectorFlow();
+  await Promise.all([
+    loadSectorFlow(),
+    loadSectorDailyHistory(activeSectorCode)
+  ]);
   startAutoRefresh();
   return destroy;
 }

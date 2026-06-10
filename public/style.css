@@ -804,35 +804,61 @@ input:focus-visible {
   border-top-color: rgba(37, 99, 235, 0.18);
 }
 
-.sector-flow-history-controls {
+.sector-flow-sector-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  align-items: end;
-  justify-content: flex-end;
+  gap: 8px;
+  margin: 0 0 16px;
 }
 
-.sector-flow-history-controls label {
-  display: grid;
-  gap: 6px;
-  color: var(--muted);
-  font-size: 0.84rem;
-  font-weight: 800;
-}
-
-.sector-flow-history-controls input {
-  min-height: 42px;
-  min-width: 164px;
-  padding: 0 12px;
+.sector-flow-sector-tab {
+  min-height: 40px;
+  padding: 0 13px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   background: var(--surface);
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.sector-flow-sector-tab:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--line-strong);
   color: var(--text);
+}
+
+.sector-flow-sector-tab.is-active {
+  border-color: rgba(37, 99, 235, 0.42);
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--price);
+}
+
+.sector-flow-sector-tab:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
 }
 
 .sector-flow-history-chart {
   height: 520px;
   min-height: 460px;
+}
+
+.sector-flow-history-table-wrap {
+  margin-top: 16px;
+}
+
+.sector-flow-history-table {
+  min-width: 840px;
+}
+
+.sector-flow-history-table td:nth-child(4),
+.sector-flow-history-table td:nth-child(5),
+.sector-flow-history-table td:nth-child(6) {
+  font-weight: 700;
 }
 
 .sector-flow-table {
@@ -1561,16 +1587,20 @@ input:focus-visible {
     align-items: flex-start;
   }
 
-  .sector-flow-actions,
-  .sector-flow-history-controls {
+  .sector-flow-actions {
     width: 100%;
     justify-content: flex-start;
   }
 
-  .sector-flow-history-controls label,
-  .sector-flow-history-controls input,
-  .sector-flow-history-controls button {
+  .sector-flow-sector-tabs {
+    flex-wrap: nowrap;
     width: 100%;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+
+  .sector-flow-sector-tab {
+    flex: 0 0 auto;
   }
 
   .chart-canvas {

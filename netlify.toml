@@ -25,6 +25,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/sector-fund-flow/daily-history"
+  to = "/.netlify/functions/sector-fund-flow-daily-history"
+  status = 200
+
+[[redirects]]
   from = "/api/sector-fund-flow"
   to = "/.netlify/functions/sector-fund-flow"
   status = 200
