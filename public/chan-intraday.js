@@ -13,7 +13,7 @@ import {
 const DEFAULT_SYMBOL = 'sh000001';
 const DEFAULT_PERIOD = 'm30';
 const INITIAL_CASH = 1000000;
-const EXCLUDED_INTRADAY_SYMBOLS = new Set(['sh000852', 'sh513120', 'sh511090']);
+const EXCLUDED_INTRADAY_SYMBOLS = new Set(['sh513120', 'sh511090']);
 const INTRADAY_INDEXES = Object.fromEntries(
   Object.entries(MINUTE_INDEXES).filter(([symbol]) => !EXCLUDED_INTRADAY_SYMBOLS.has(symbol))
 );
